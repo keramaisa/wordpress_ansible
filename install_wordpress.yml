@@ -1,0 +1,107 @@
+
+---
+
+- hosts: localhost
+  tasks:
+    - name: Install Apache
+      yum: 
+        name: httpd 
+        update_cache: yes 
+        state: latest
+      notify:
+      - restart httpd
+      become: yes
+
+    - name: Install PHP
+      yum:
+        name: php
+        state: latest
+      notify:
+      - restart httpd
+      become: yes
+ 
+    - name: Download MySQL rpm
+      get_url:
+        url: http://repo.mysql.com/mysql-community-release-el7-7.noarch.rpm
+        dest: /tmp
+
+    - name: Install MySQL
+      yum: 
+        name: "{{ packages }}"
+        update_cache: yes  
+        state: present
+      vars:
+        packages:
+         - python-mysqldb
+         - mysql-server
+      become: yes
+
+    - name: Install PHP to MySql link
+      yum:
+        name: php-gd 
+        update_cache: yes
+        state: latest
+      notify:
+      - restart httpd
+      become: yes
+        
+    - name: Start Apache
+      service: 
+         name: httpd
+         enabled: true
+         state: started
+
+    - name: Start MySql
+      service:
+         name: mysql
+         enabled: true
+         state: started
+ 
+    - name: Create new database with name MyWordpress
+      mysql_db:
+         name: MyWordpress
+         state: present
+
+    - name: Create new user bob for MyWordpress database with password 1111
+      mysql_user:
+         name: bob
+         password: 1111
+         priv: '*.*:ALL'
+         state: present
+  
+
+  handlers:
+    - name: restart httpd
+      service: 
+         name: httpd
+         state: restarted
+    - name: Start MySql
+      service:
+         name: mysql
+         state: restarted
+
+
+    - name: Download WordPress
+      get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/wordpress-latest.tar.gz
+      become: yes
+ 
+    - name: Extract WordPress to /var/www
+      unarchive: src=/tmp/wordpress-latest.tar.gz dest=/var/www 
+      become: yes
+
+ #tutaj nie jestem pewna czy na CentOS folder z Apache2 tez nazywa sie apache2, czy httpd ?
+
+    - name: Update Apache site
+      become: yes
+      lineinfile:
+         dest=/etc/apache2/sites-enabled/000-default.conf
+         regexp="(.)+DocumentRoot /var/www/html"
+         line="DocumentRoot /var/www/wordpress"
+      notify:
+      - restart httpd
+
+    - name: Copy wp-config file to /var/www/html/
+      command: mv /var/www/wordpress/wp-config-sample.php /var/www/wordpress/wp-config.php creates=/var/www/wordpress/wp-config.php
+      become: yes
